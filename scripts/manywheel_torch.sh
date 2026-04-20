@@ -33,10 +33,12 @@ except ImportError:
     print("ERROR: PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(1)
 
-data = yaml.safe_load(workflow_path.read_text())
-
-jobs = data.get("jobs", {})
-
+try:
+    data = yaml.safe_load(workflow_path.read_text())
+    jobs = data.get("jobs", {})
+except (OSError, yaml.YAMLError, AttributeError) as exc:
+    print(f"ERROR: failed to read or parse workflow YAML '{workflow_path}': {exc}", file=sys.stderr)
+    sys.exit(1)
 match = None
 for job_name, job in jobs.items():
     with_section = job.get("with", {})

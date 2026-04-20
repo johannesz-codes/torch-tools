@@ -9,6 +9,15 @@ export DESIRED_CUDA="${DESIRED_CUDA:-cu130}"
 export DESIRED_PYTHON="${DESIRED_PYTHON:-3.11}"
 WORKFLOW_FILE="${PYTORCH_REPO}/.github/workflows/generated-linux-binary-manywheel-nightly.yml"
 
+if [[ ! -d "$PYTORCH_REPO" ]]; then
+  echo "ERROR: PYTORCH_REPO does not exist or is not a directory: $PYTORCH_REPO" >&2
+  exit 1
+fi
+
+if [[ ! -r "$WORKFLOW_FILE" ]]; then
+  echo "ERROR: workflow file does not exist or is not readable: $WORKFLOW_FILE" >&2
+  exit 1
+fi
 readarray -t BUILD_VARS < <(
 python3 - "$WORKFLOW_FILE" "${DESIRED_CUDA}" "${DESIRED_PYTHON}" <<'PY'
 import sys

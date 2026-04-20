@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === Konfig ===
-PYTORCH_REPO="${PYTORCH_REPO:-$HOME/dev/pytorch_main/pytorch}"   # dein pytorch checkout
-ARTIFACTS_DIR="${ARTIFACTS_DIR:-$HOME/wheelhouse_artifacts}"  # output
-DOCKER_IMAGE="${DOCKER_IMAGE:-docker.io/pytorch/manylinux2_28-builder:cuda12.8}"
+# Verzeichnis des Scripts selbst
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTORCH_REPO="${PYTORCH_REPO:-$SCRIPT_DIR/../../pytorch}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SCRIPT_DIR/../../wheelhouse_artifacts}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-docker.io/pytorch/manylinux2_28-builder:cuda13.0}"
 
+# === Konfig ===
 # entspricht deinem Job
 export PYTORCH_ROOT="/pytorch"
 export PACKAGE_TYPE="manywheel"
-export DESIRED_CUDA="cu128"
-export GPU_ARCH_VERSION="12.8"
+export DESIRED_CUDA="cu130"
+export GPU_ARCH_VERSION="13.0"
 export GPU_ARCH_TYPE="cuda"
 export DESIRED_PYTHON="3.11"
 export SKIP_ALL_TESTS="1"
@@ -58,7 +60,7 @@ echo "Container: ${container_name}"
 
 # === Env erzeugen (wie CI) ===
 docker exec -t -w "${PYTORCH_ROOT}" "${container_name}" bash -lc \
-  "bash .circleci/scripts/binary_populate_env.sh"
+  "bash .ci/pytorch/binary_populate_env.sh"
 
 # === Build ===
 docker exec -t "${container_name}" bash -lc \

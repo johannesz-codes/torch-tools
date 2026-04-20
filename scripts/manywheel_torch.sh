@@ -3,24 +3,76 @@ set -euo pipefail
 
 # Verzeichnis des Scripts selbst
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTORCH_REPO="${PYTORCH_REPO:-$SCRIPT_DIR/../../pytorch}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SCRIPT_DIR/../../wheelhouse_artifacts}"
-DOCKER_IMAGE="${DOCKER_IMAGE:-docker.io/pytorch/manylinux2_28-builder:cuda13.0}"
+PYTORCH_REPO="${PYTORCH_REPO:-$SCRIPT_DIR/../../pytorch}"
+export DESIRED_CUDA="${DESIRED_CUDA:-cu130}"
+export DESIRED_PYTHON="${DESIRED_PYTHON:-3.11}"
+WORKFLOW_FILE="${PYTORCH_REPO}/.github/workflows/generated-linux-binary-manywheel-nightly.yml"
+
+readarray -t BUILD_VARS < <(
+python3 - "$WORKFLOW_FILE" "${DESIRED_CUDA}" "${DESIRED_PYTHON}" <<'PY'
+import sys
+from pathlib import Path
+
+workflow_path = Path(sys.argv[1])
+desired_cuda = sys.argv[2]
+desired_python = sys.argv[3]
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML is required (pip install pyyaml)", file=sys.stderr)
+    sys.exit(1)
+
+data = yaml.safe_load(workflow_path.read_text())
+
+jobs = data.get("jobs", {})
+
+match = None
+for job_name, job in jobs.items():
+    with_section = job.get("with", {})
+    if (
+        with_section.get("PACKAGE_TYPE") == "manywheel"
+        and str(with_section.get("DESIRED_CUDA")) == desired_cuda
+        and str(with_section.get("DESIRED_PYTHON")) == desired_python
+        and "build" in job_name
+    ):
+        match = with_section
+        break
+
+if match is None:
+    print(
+        f"ERROR: no matching manywheel build job found for DESIRED_CUDA={desired_cuda}, DESIRED_PYTHON={desired_python}",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+gpu_arch_version = match.get("GPU_ARCH_VERSION", "")
+docker_image = match.get("DOCKER_IMAGE", "")
+docker_image_tag_prefix = match.get("DOCKER_IMAGE_TAG_PREFIX", "")
+extra_requirements = match.get("PYTORCH_EXTRA_INSTALL_REQUIREMENTS", "")
+
+print(f"GPU_ARCH_VERSION={gpu_arch_version}")
+print(f"DOCKER_IMAGE_BASE={docker_image}")
+print(f"DOCKER_IMAGE_TAG_PREFIX={docker_image_tag_prefix}")
+print(f"PYTORCH_EXTRA_INSTALL_REQUIREMENTS={extra_requirements}")
+PY
+)
 
 # === Konfig ===
-# entspricht deinem Job
-export PYTORCH_ROOT="/pytorch"
-export PACKAGE_TYPE="manywheel"
-export DESIRED_CUDA="cu130"
-export GPU_ARCH_VERSION="13.0"
-export GPU_ARCH_TYPE="cuda"
-export DESIRED_PYTHON="3.11"
-export SKIP_ALL_TESTS="1"
-export PYTORCH_EXTRA_INSTALL_REQUIREMENTS="cuda-toolkit[nvrtc,cudart,cupti,cufft,curand,cusolver,cusparse,cublas,cufile,nvjitlink,nvtx]==12.8.1; platform_system == 'Linux' | cuda-bindings==12.9.4; platform_system == 'Linux' | nvidia-cudnn-cu12==9.19.0.56; platform_system == 'Linux' | nvidia-cusparselt-cu12==0.7.1; platform_system == 'Linux' | nvidia-nccl-cu12==2.28.9; platform_system == 'Linux' | nvidia-nvshmem-cu12==3.4.5; platform_system == 'Linux'"
+for line in "${BUILD_VARS[@]}"; do
+  export "$line"
+done
 
+export GPU_ARCH_TYPE="cuda"
+export PACKAGE_TYPE="manywheel"
+export PYTORCH_ROOT="/pytorch"
+export SKIP_ALL_TESTS="${SKIP_ALL_TESTS:-1}"
 export BINARY_ENV_FILE="/tmp/env"
 export BUILD_ENVIRONMENT="linux-binary-manywheel"
 export PYTORCH_FINAL_PACKAGE_DIR="/artifacts"
+
+DOCKER_IMAGE="${DOCKER_IMAGE:-docker.io/pytorch/${DOCKER_IMAGE_BASE}:${DOCKER_IMAGE_TAG_PREFIX}}"
 
 mkdir -p "${ARTIFACTS_DIR}"
 

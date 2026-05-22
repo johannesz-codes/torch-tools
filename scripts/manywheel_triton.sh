@@ -5,12 +5,14 @@ set -euo pipefail
 # Config: hier bei Bedarf anpassen
 # ============================================================
 PY_VERS="3.11"
-CUDA_VERSION="12.8"
+CUDA_VERSION="13.0"
 BUILD_DEVICE="cuda"
 PLATFORM="manylinux_2_28_x86_64"
 DOCKER_IMAGE="pytorch/manylinux2_28-builder:cpu"
 ARTIFACT_DIR="${PWD}/artifacts"
-REPO_ROOT="${PWD}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SCRIPT_DIR/../../wheelhouse_artifacts}"
+REPO_ROOT="${PYTORCH_REPO:-$SCRIPT_DIR/../../pytorch}"
 
 # ============================================================
 # Usage

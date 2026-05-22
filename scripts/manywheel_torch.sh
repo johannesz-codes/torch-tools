@@ -26,43 +26,48 @@ except ImportError:
 
 data = yaml.safe_load(workflow_path.read_text())
 
-jobs = data.get("jobs", {})
+cuda_job_map = {
+    "cu126": "cuda12_6",
+    "cu130": "cuda13_0",
+    "cu132": "cuda13_2",
+    "cpu": "cpu",
+}
 
-match = None
-for job_name, job in jobs.items():
-    with_section = job.get("with", {})
-    if (
-        with_section.get("PACKAGE_TYPE") == "manywheel"
-        and str(with_section.get("DESIRED_CUDA")) == desired_cuda
-        and str(with_section.get("DESIRED_PYTHON")) == desired_python
-        and "build" in job_name
-    ):
-        match = with_section
-        break
+cuda_job = cuda_job_map.get(desired_cuda)
+if cuda_job is None:
+    print(f"ERROR: unsupported DESIRED_CUDA={desired_cuda}", file=sys.stderr)
+    sys.exit(1)
 
-if match is None:
-    print(
-        f"ERROR: no matching manywheel build job found for DESIRED_CUDA={desired_cuda}, DESIRED_PYTHON={desired_python}",
-        file=sys.stderr,
-    )
-    sys.exit(2)
+py_job = "py" + desired_python.replace(".", "_")
+job_name = f"manywheel-{py_job}-{cuda_job}-build"
 
-gpu_arch_version = match.get("GPU_ARCH_VERSION", "")
-docker_image = match.get("DOCKER_IMAGE", "")
-docker_image_tag_prefix = match.get("DOCKER_IMAGE_TAG_PREFIX", "")
-extra_requirements = match.get("PYTORCH_EXTRA_INSTALL_REQUIREMENTS", "")
+try:
+    match = data["jobs"][job_name]["with"]
+except KeyError:
+    print(f"ERROR: could not find job {job_name} with .with block", file=sys.stderr)
+    sys.exit(1)
 
-print(f"GPU_ARCH_VERSION={gpu_arch_version}")
-print(f"DOCKER_IMAGE_BASE={docker_image}")
-print(f"DOCKER_IMAGE_TAG_PREFIX={docker_image_tag_prefix}")
-print(f"PYTORCH_EXTRA_INSTALL_REQUIREMENTS={extra_requirements}")
+print(match["DOCKER_IMAGE"])
+print(match["DOCKER_IMAGE_TAG_PREFIX"])
+print(match["build_name"])
+print(match.get("GPU_ARCH_VERSION", ""))
+print(match.get("PYTORCH_EXTRA_INSTALL_REQUIREMENTS", ""))
 PY
 )
 
 # === Konfig ===
-for line in "${BUILD_VARS[@]}"; do
-  export "$line"
-done
+DOCKER_IMAGE_BASE="${BUILD_VARS[0]}"
+DOCKER_IMAGE_TAG_PREFIX="${BUILD_VARS[1]}"
+BUILD_NAME="${BUILD_VARS[2]}"
+GPU_ARCH_VERSION="${BUILD_VARS[3]:-}"
+PYTORCH_EXTRA_INSTALL_REQUIREMENTS="${BUILD_VARS[4]:-}"
+
+export DOCKER_IMAGE_BASE
+export DOCKER_IMAGE_TAG_PREFIX
+export BUILD_NAME
+export GPU_ARCH_VERSION
+export PYTORCH_EXTRA_INSTALL_REQUIREMENTS
+
 
 export GPU_ARCH_TYPE="cuda"
 export PACKAGE_TYPE="manywheel"

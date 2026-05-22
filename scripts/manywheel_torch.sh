@@ -15,7 +15,7 @@ if [[ ! -f "${WORKFLOW_FILE}" ]]; then
   exit 1
 fi
 
-readarray -t BUILD_ENV < <(
+BUILD_ENV_OUTPUT=$(
 python3 - "$WORKFLOW_FILE" "${DESIRED_CUDA}" "${DESIRED_PYTHON}" <<'PY'
 import sys
 from pathlib import Path
@@ -65,6 +65,31 @@ if desired_python not in available_pythons:
 env["DOCKER_IMAGE"] = container["image"]
 env["DESIRED_PYTHONS"] = desired_python
 
+extra_requirements = env.get("PYTORCH_EXTRA_INSTALL_REQUIREMENTS", "")
+expected_cuda_major = {
+    "cu126": "12",
+    "cu130": "13",
+    "cu132": "13",
+}.get(desired_cuda)
+if desired_cuda == "cpu":
+    if extra_requirements:
+        print("ERROR: CPU wheel job unexpectedly has CUDA package requirements", file=sys.stderr)
+        sys.exit(1)
+elif expected_cuda_major:
+    wrong_cuda_major = "13" if expected_cuda_major == "12" else "12"
+    if f"nvidia-" in extra_requirements and f"-cu{wrong_cuda_major}" in extra_requirements:
+        print(
+            f"ERROR: {job_name} has CUDA {wrong_cuda_major} package requirements for {desired_cuda}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if f"cuda-toolkit" in extra_requirements and f"=={expected_cuda_major}." not in extra_requirements:
+        print(
+            f"ERROR: {job_name} cuda-toolkit requirement does not match {desired_cuda}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
 for key in sorted(env):
     value = env[key]
     if value is None:
@@ -72,6 +97,7 @@ for key in sorted(env):
     print(f"{key}={value}")
 PY
 )
+readarray -t BUILD_ENV <<< "${BUILD_ENV_OUTPUT}"
 
 for entry in "${BUILD_ENV[@]}"; do
   export "${entry}"
